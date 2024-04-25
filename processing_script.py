@@ -44,7 +44,17 @@ def process_file(filepath):
     return config_dict, df, false_ratio, channel_long_buff_ratio
 
 
-def process_directory(directory_path, existing_keys):
+def generate_unique_key(base_key, existing_keys, key_counts):
+    """
+    Generates a unique key by appending a number to the base key.
+    """
+    count = key_counts.get(base_key, 0)
+    new_key = f"{base_key}_{count}"
+    key_counts[base_key] = count + 1  # Update the count for this base key
+    return new_key
+
+
+def process_directory(directory_path, existing_keys, key_counts):
     """
     Processes all files in the specified directory.
     """
@@ -60,34 +70,30 @@ def process_directory(directory_path, existing_keys):
             continue
 
         base_key = f"{config['num_channels']}_{config['mean_arrival_time']}"
-        unique_key = generate_unique_key(base_key, existing_keys)
+        unique_key = generate_unique_key(base_key, existing_keys, key_counts)
         existing_keys.add(unique_key)
 
         configurations[unique_key] = config
         dataframes[unique_key] = df
-        metrics[unique_key] = {'false_ratio': false_ratio, 'channel_long_buff_ratio': channel_long_buff_ratio}
+        metrics[unique_key] = {
+            'probability_of_error': false_ratio,
+            'channel_long_buff_ratio': channel_long_buff_ratio,
+            'mean_arrival_time': config['mean_arrival_time'],
+            'key_count': key_counts[base_key]
+        }
 
     return configurations, dataframes, metrics
 
-def generate_unique_key(base_key, existing_keys):
-    """
-    Generates a unique key by appending a number to the base key.
-    """
-    count = 0
-    new_key = f"{base_key}_{count}"
-    while new_key in existing_keys:
-        count += 1
-        new_key = f"{base_key}_{count}"
-    return new_key
 
 def process_multiple_directories(directory_paths):
     all_configs = {}
     all_dfs = {}
     all_metrics = {}
     existing_keys = set()
+    key_counts = {}  # To track the number of each key
 
     for directory_path in directory_paths:
-        configs, dfs, metrics = process_directory(directory_path, existing_keys)
+        configs, dfs, metrics = process_directory(directory_path, existing_keys, key_counts)
         all_configs.update(configs)
         all_dfs.update(dfs)
         all_metrics.update(metrics)
@@ -98,17 +104,15 @@ def process_multiple_directories(directory_paths):
 directory_paths = ['data_from_curie', 'data_from_fermi']
 all_configs, all_dfs, all_metrics = process_multiple_directories(directory_paths)
 
-# Print out the configurations, data, and metrics
-for key in all_configs:
-    #print(f"Configuration for {key}:", all_configs[key])
-    #print(f"Data for {key} (first few rows):", all_dfs[key].head())
+# Print out the metrics
+for key in all_metrics:
     print(f"Metrics for {key}:", all_metrics[key])
 
 
 # Saving the metrics to a JSON file
 def save_metrics(metrics, filename):
     with open(filename, 'w') as file:
-        json.dump(metrics, file)
+        json.dump(metrics, file, indent=4)
 
-
+        
 save_metrics(all_metrics, 'metrics.json')
